@@ -1,0 +1,247 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(FactoMineR)
+library(factoextra)
+```
+
+
+##QUESTION 1
+
+```{r}
+data <- read.csv("ScrewCaps.csv")
+data %>% names
+data %>% summary
+data %>% View
+```
+Just uploading and observing the structure of the dataset
+
+##QUESTION 2 
+
+###Price Study
+```{r}
+
+ggplot(data, aes(x = Price)) + geom_histogram() + ggtitle("Cap Unit Price Histogram")
+
+summary(data$Price)
+quantile(data$Price, probs = seq(0,1,length = 11))
+
+density_price <- density(data$Price)
+plot(density_price)
+
+```
+The distribution of the price is concentrated between 8 and 20 with 75% of the values between 12 and 19. We observe that the minimum is very close to the most common prices but, on the contrary, the maximum price is way higher. There exist an "expensive category" above 30 which represents less than 10%
+
+
+###Correlation between price and quantitative variables
+```{r}
+
+cor(data$Price,data$Length)
+
+```
+
+```{r}
+cor(data$Price,data$weight)
+```
+
+The correlations between price and length is 80%, and 78% between price and weight. These are strong correlations which 't show an obvious impact of the cap dimensions on its price
+
+
+###Correlation between price and categorical variables
+```{r}
+ggplot(data, aes(x = Impermeability, y = Price)) + geom_boxplot()
+Impermeability_group <- data %>% 
+              group_by(Impermeability)
+      
+```
+The correlation between the price and impermeability seems obvious considering the boxplot: the second impermeability type seems to induce higher prices which are way higher. If we do not consider the outliers the 1st quartile of the second impermeability type is higher than the 90% of the price of the type 1 impermeability caps.
+
+
+
+
+```{r}
+ggplot(data, aes(x = Shape, y = Price)) + geom_boxplot()
+
+data %>% 
+  group_by(Shape) %>% 
+  summarize(mean(Price))
+```
+The boxplot do not show an obvious correlation between the price and the shape. The mean of the 2nd and third shapes seem to be very close and a little higher than those of the 1st and 3rd shape but this is not an obvious correlation.
+
+```{r}
+ggplot(data, aes(x = Supplier, y = Price)) + geom_boxplot()
+
+data %>% 
+  group_by(Supplier) %>% 
+  summarize(mean(Price))
+```
+The box plot show wide difference in variance between suppliers but no real price difference. If we consider the means, the 3rd supplier seems slightly cheaper but nothing is obvious. We may see later whether some categorical data can show true differences between suppliers which are hiddent by the different types of caps in this graph.
+
+
+
+## QUESTION 3
+```{r}
+print(ggplot(data, aes(x = Mature.Volume)) + geom_histogram())
+quantile(data$Mature.Volume, probs = seq(0,1,length = 11))
+outliers <- data %>% filter(Mature.Volume>=5e+05)
+outliers %>% print
+```
+The plotting show that 4 values look completely abnormal with 8e+05 volumes (which is over 3 times the 9th decile of the Mature.VOlume varaible) These are suspicious as the volume are exactly the same (maybe a mistake in data reporting) and seem off compared to the rest of the information. After taking them off, we can try to plot the histogram another time to see if other values seem off.
+
+```{r}
+data_clean <- data[!(data[,"X"] %in% outliers[,"X"]),]
+ggplot(data_clean, aes(x = Mature.Volume)) + geom_histogram()
+```
+
+COnsidering the 4 outliers, we can observe that their charactersitics are extremely similar (all variables except price), which can either mean they are a very specific type of caps or that it is the result of a mistake in data reporting. Whatever answer is right, it seems useful to take them off in order to avoid a distorsion within our dataset. 
+
+## QUESTION 4
+```{r}
+
+res.pca <- PCA(data_clean, quanti.sup = c(1,11), quali.sup = c(2,6,7,8,10), scale = T)
+summary(res.pca, nbelements = 6, ncp = 4)
+```
+
+A PCA enables to reduce a dataframe with numerous dimensions to a representation, as faithfull to the orignal data as possible, of lower dimension. It enables to better understan the data and the correlations within the variables of the dataset. It is also a preliminary analysis for other processes such as predictive analysis or clustering. 
+
+
+The categorical data are not included in the PCA process, they are added to the final representation at the center of mass of the cloud of points corresponding to the category.
+
+## QUESTION 5
+```{r}
+print(cor(data_clean[,c(3,4,5,9,12)]))
+```
+The correlation matrix shows a very high correlation between length, weight and diameter (above 95%). It also shows that those three variables are almost independant of the number of pieces variable, which is confirmed by the correlation circle. 
+However, the correlation circle seems to be showing a very negative corrolation between the number of pieces variabe and the Mature Volume variable, which is not shown on the correlation matrix (-7%). This can be explained as the Mature.Volume variable is far from the circle. This may mean that the Mature.Volume is not well projeted on the plan of the circle. This means that the variable is one of the furthest from the plan, and the projection distorts the angle between this variable and the others variables.
+
+## QUESTION 6
+
+The focus of PCA is correlation between variables and linear relationships. This implies it can overlook other non linear relationships. Although there is indeed some sort of "blind spot", the linear approach is natural and seems to depict accurately and important part of the interactions between the variables.
+
+PCA is also used as a "first step" analysis, to give a better ideao of the correlations within a dataset. Other analysis focusing on non linear relationships can take place afterwards but the PCA will help the analyst have a clearer view of the set he is working with.
+
+## QUESTION 7
+```{r}
+plot(res.pca, select = "quali", invisible = "ind")
+```
+We can observe that Type2 and PS are quite high on the dim 1 axis. If we consider the correlation circle, it appears that the Type 2 and PS Caps would tend to be bigger dimension caps (weight, diameter and length), with a rather high price. However, they are very close to the dim 1 axis which shows that the number of pieces may not have an effect on the impereability and the raw material chosen for manufacturing a cap. 
+
+The cumulative percentage of inertia of dimension 1 and 2 is 83% and the independant variables inertia for the two first dimensions is 51.4% on average. We can deduce that the 2D vision of the dataset given by the PCA is quite accurate and that the variables are very correlated as they are well above the thershold of independant variables inertia. The correlation circle tends to confirm this as many of the variables seem to behave in an extremely similar manner.
+
+## QUESTION 8
+```{r}
+print(eigen_v_cov_matrix<- eigen(cor(data_clean[,c(3,4,5,9,12)])))
+print(eigen_v_cov_matrix$vectors[,c(1,2)])
+
+```
+The 2 most synthetic variables are the 2 eigenvectors linked to the 2 eigen values 3.107 and 1.07
+
+## QUESTION 9
+
+
+PCA is used as a pre-processing operation before clustering as the AHC and k-means are applied most of the time on the 3 first components of the PCA which gives a more precise idea of the centers of the data. In this data, considering the inertia of the eigenvalues, we would choose 3 components as the 3 first eigenvectors cumulate 99% of the inertia (above the 95% threshold. 
+
+Any additional component would not bring valuabe information, would make the model more complicated and could even give weight to data that may simply be "noise"
+
+## QUESTION 10
+
+This functions calculates the distance between the points of a cluster depending on the number of clusters used in the kmeans function. We can see that after the 4th cluster, there is no significant advantage of any additional cluster. We can also see that the gap between the third of fourth cluster is important.
+
+The question is then whether to keep 3 or 4 clusters. Considering the wider improvement between the the 3rd and 4th cluster than between the 2nd and 4th, we choose to keep 4 clusters.
+
+
+```{r}
+data_kmeans <- res.pca$ind$coord[,1:3]
+
+fviz_nbclust(data_kmeans, kmeans, method = "wss")
+
+```
+We can see with this that the in-between inertia is reduced by about 50% up to the third cluster. It slows down significatively when it reaches 4 clusters, which would indicate that 4 clusters would be the optimal division.
+
+```{r}
+res.kmeans <- kmeans(data_kmeans, 4, nstart = 20)
+plot(data_kmeans, col = res.kmeans$cluster, pch = 20, main = "K-means")
+```
+
+
+## QUESTION 11
+```{r}
+res.hcpc <- HCPC(res.pca, nb.clust = -1)
+```
+
+The HCA seems to show that the optimal number of clusters may be 3. In order to be able to compare both options, we display a new kmeans with 3 clusters below.
+
+```{r}
+res.kmeans <- kmeans(data_kmeans, 3, nstart = 20)
+plot(data_kmeans, col = res.kmeans$cluster, pch = 20, main = "K-means 3 clusters")
+```
+
+
+## QUESTION 12
+
+The optimal HCA shows three clusters of unequal size and of unequal within inertia. The clusters in black and blue have very little within distance (which is easily explained by their proximity) whereas the thrid cluster is much more scattered, but is also much farther from the two first clusters.
+
+The green, left cluster contains two main clusters, one with very small within distance and the other much more scattered. We can notice that the further right the clusters are, the more scattered they are, due to the decreasing population with great volumes (length, diameter)
+
+
+
+```{r}
+res.hcpc$desc.var$quanti$`2`
+```
+We can see that this black cluster is primaryly affected by the Mature Volume and the number of pieces, it is pretty scattered as some points look almost like outliers. The tree shows two subclusters wich seem to be differentiated by the number of pieces of the caps. 
+
+## QUESTION 13
+
+The choice of 3 components is obvious with the PCA data as 3 components describe already 99% of the inertia and getting one more dimension would make the model more complicated for virtually 0 progress in terms of precision. As for the hypothesis of 2 components, it only gives a 83% of inertia, which is below the target 95%.
+
+It can be verified by computing the AHC with 2 to 6 clusters, which shows very little change and add much complexity to the model without necessarily providing coherence for clusters (the 3rd and 4th clusters appear to be extremely close.
+
+## QUESTION 14
+```{r}
+catdes(data_clean,num.var=2)
+```
+
+This gives clear insight to the company on the specificity of each supplier and enables them to know which supplier may meet their needs for specific products.
+
+For example, supplier A seems to be specialized in PS Raw Material whereas Supplier B specializes in ABS material. If the company orders a wide amount of caps, they may not have an exact idea of the specialties of each supplier. This would en able them to know better their business partners, and maximize thei influence. Indeed, if they decide they need a new cap in PS material, they may want to turn to supplier A and offer them exclusivity on PS material caps in exchange for the exclusivity. This wouldn't hurt their supply chain, as supplier A is already supplying PS material caps.
+
+This is a very powerful supply chain optimization tool.
+
+## QUESTION 15
+```{r}
+res.famd <- FAMD(data_clean, ncp = 10, sup.var = c(1,11))
+
+```
+
+```{r}
+res.hcpc <- HCPC(res.famd, nb.clust = -1)
+summary(res.famd, nbelements =  10, ncp = 6  )
+```
+This shows that adding variables and dimensions makes it way more difficult to obtain a clustering and significatively reduces the precision of the analysis compared to the above PCA. We observe that 10 dimensions are now neeed to reach the 95% inertia thershold and that no other significant correlation has appeared on the correlation circle.
+
+The impact of this analysis is to make the clustering way more difficult as 6 clusters are now needed to obtain optimal results. We are faced with a "chain" type tree with numerous branches on the main right branch which doesn't seem to add any information but makes the tree way more difficult to read. 
+
+We do not obtain much more information as the categorical data map is quite similar to the one obtained with PCA on quantitative var and quali.sup mapping. 
+
+## QUESTION 16
+```{r}
+lm(Price ~ Supplier + Diameter + weight + nb.of.pieces + Shape + Impermeability + Finishing + Mature.Volume + Raw.Material + Price + Length, data_clean)
+```
+With this regression we can calculate the price by multiplying the coefficient to the corresponding observations and adding the intercept. For the categorical variables the coefficent is multiplied by "1" if the observation belongs to the category and 0 otherwise.
+
+
+## QUESTION 17
+
+The supplier impact on price seem quite weak in the FAMD model, which would not justify a separate model for each supplier; What is more, we only have 192 observations which is not huge, dividing this by the number of suppliers would reduce our observations to about 60 per model and would cause a loss of precision in the results of the model.
+
+## QUESTION 18
+
+The idea to put 0 or the median would destroy the model as adding a 0 would totally change the means of every variable, destroy the structure of the variance and thus affect the correlation between the variables. The median idea is as bad as it would drastically reduce the variance of every variable and change every results for PCA and clustering analysis, as the inertia is the main criteria for these analysis.
+
+Creating a "missing" category would have 2 outcomes : either you remove the rows with "missing" in it, which will cause a loss of information, or you don't and the impact would just be adding one irrelevant qualitative variable to the model, while the "missing" will act exactly as the previous "NA"
+
